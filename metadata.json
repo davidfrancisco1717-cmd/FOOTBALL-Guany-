@@ -1,0 +1,6 @@
+{
+  "name": "FOOTBALL PSP 3D",
+  "description": "Jogo de futebol 3D completo no navegador inspirado nos clássicos da PSP, com estádios dia e noite, física realista da bola, IA tática 5v5 e controlos táteis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

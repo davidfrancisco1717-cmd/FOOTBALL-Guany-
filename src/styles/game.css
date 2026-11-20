@@ -1,0 +1,188 @@
+.game-shell {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.webgl-mount {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-interactive {
+  pointer-events: auto;
+}
+
+/* PSP Virtual Joystick */
+.psp-joystick-zone {
+  position: absolute;
+  left: max(14px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: clamp(118px, 21vw, 152px);
+  height: clamp(118px, 21vw, 152px);
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.psp-joystick-base {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.55) 0%, rgba(15, 23, 42, 0.78) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.65), 0 4px 16px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.psp-joystick-knob {
+  width: 44%;
+  height: 44%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #475569 0%, #1e293b 70%, #0f172a 100%);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+  transition: transform 40ms linear;
+  will-change: transform;
+}
+
+/* PSP Action Diamond */
+.psp-actions-cluster {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: clamp(150px, 26vw, 196px);
+  height: clamp(150px, 26vw, 196px);
+  touch-action: none;
+  pointer-events: none;
+}
+
+.psp-btn {
+  position: absolute;
+  width: clamp(46px, 8.2vw, 60px);
+  height: clamp(46px, 8.2vw, 60px);
+  border-radius: 9999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 19, 30, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55), inset 0 1px 2px rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform 70ms ease, background-color 70ms ease, border-color 70ms ease;
+}
+
+.psp-btn:active,
+.psp-btn.is-pressed {
+  transform: scale(0.92);
+  background: rgba(30, 41, 59, 0.94);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.psp-btn-top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.psp-btn-top:active,
+.psp-btn-top.is-pressed {
+  transform: translateX(-50%) scale(0.92);
+}
+
+.psp-btn-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.psp-btn-bottom:active,
+.psp-btn-bottom.is-pressed {
+  transform: translateX(-50%) scale(0.92);
+}
+
+.psp-btn-left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.psp-btn-left:active,
+.psp-btn-left.is-pressed {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.psp-btn-right {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.psp-btn-right:active,
+.psp-btn-right.is-pressed {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.psp-btn-combo {
+  position: absolute;
+  right: 0;
+  top: -42px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1.5px solid rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.psp-btn-combo:active,
+.psp-btn-combo.is-pressed {
+  transform: scale(0.94);
+  background: rgba(180, 83, 9, 0.8);
+}
+
+/* Portrait warning banner on very narrow portrait screens */
+.portrait-hint {
+  display: none;
+}
+
+@media (max-width: 640px) and (orientation: portrait) {
+  .portrait-hint {
+    display: flex;
+  }
+}
+
+@keyframes goalPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.84) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.goal-banner-anim {
+  animation: goalPop 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
