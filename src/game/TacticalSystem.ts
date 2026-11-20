@@ -2,7 +2,17 @@ import * as THREE from 'three';
 import { Player } from './Player';
 import { HALF_LENGTH, HALF_WIDTH } from './types';
 
+export type TeamTacticMode = 'balanced' | 'attacking' | 'defensive';
+
 export class TacticalSystem {
+  public getTacticMode(ballPos: THREE.Vector3, teamHasBall: boolean, attackDir: 1 | -1): TeamTacticMode {
+    const progress = (ballPos.x * attackDir) / HALF_LENGTH; // -1 own goal .. +1 opp goal
+    if (teamHasBall) {
+      return progress > 0.2 ? 'attacking' : 'balanced';
+    }
+    return progress < -0.2 ? 'defensive' : 'balanced';
+  }
+
   public getTargetAnchor(
     player: Player,
     ballPos: THREE.Vector3,
@@ -10,53 +20,82 @@ export class TacticalSystem {
     out: THREE.Vector3,
   ): THREE.Vector3 {
     const dir = player.side === 'home' ? 1 : -1;
-    // Normalized ball progress along team attack direction (-1 own goal .. +1 opp goal)
     const ballProgress = (ballPos.x * dir) / HALF_LENGTH;
     const ballLateral = ballPos.z;
+    const tactic = this.getTacticMode(ballPos, teamHasBall, dir);
 
     let baseX = 0;
     let baseZ = 0;
 
     if (player.role === 'GR') {
-      baseX = -dir * (HALF_LENGTH - 1.45);
+      baseX = -dir * (HALF_LENGTH - 1.5);
       baseZ = THREE.MathUtils.clamp(ballLateral * 0.25, -2.5, 2.5);
       return out.set(baseX, 0, baseZ);
     }
 
     if (teamHasBall) {
-      // Attacking shape: push up, spread wide to offer passing lanes
+      // Attacking 1-2-1 diamond with clear vertical & lateral separation
+      const pushOffset = tactic === 'attacking' ? 2.6 : 0;
+
       if (player.role === 'DEF') {
-        baseX = THREE.MathUtils.clamp(ballPos.x - dir * 13, -HALF_LENGTH + 7, 10 * dir);
-        baseZ = THREE.MathUtils.clamp(ballLateral * 0.4, -7, 7);
+        // Deep pivot behind/angled from carrier offering safe recycling lane
+        baseX = ballPos.x - dir * (11.2 - pushOffset * 0.3);
+        baseX =
+          dir === 1
+            ? THREE.MathUtils.clamp(baseX, -(HALF_LENGTH - 6.5), 11.5)
+            : THREE.MathUtils.clamp(baseX, -11.5, HALF_LENGTH - 6.5);
+        const pivotShade = ballLateral > 4 ? -2.2 : ballLateral < -4 ? 2.2 : 0;
+        baseZ = THREE.MathUtils.clamp(ballLateral * 0.36 + pivotShade, -7.2, 7.2);
       } else if (player.role === 'MED') {
         const isLeftMid = player.homeAnchor.z < 0;
         const wingSign = isLeftMid ? -1 : 1;
-        baseX = THREE.MathUtils.clamp(ballPos.x + dir * 5.5, -10, HALF_LENGTH - 5.5);
-        if (dir === -1) baseX = THREE.MathUtils.clamp(ballPos.x + dir * 5.5, -(HALF_LENGTH - 5.5), 10);
-        baseZ = THREE.MathUtils.clamp(wingSign * 10.5 + ballLateral * 0.25, -HALF_WIDTH + 2.5, HALF_WIDTH - 2.5);
+        const sameSideAsBall = wingSign * ballLateral > 0;
+
+        // Ball-side mid offers diagonal support; weak-side mid stretches forward into opposite half-space
+        const ahead = sameSideAsBall ? 5.2 : 9.4 + pushOffset;
+        baseX = ballPos.x + dir * ahead;
+        baseX =
+          dir === 1
+            ? THREE.MathUtils.clamp(baseX, -11, HALF_LENGTH - 4.5)
+            : THREE.MathUtils.clamp(baseX, -(HALF_LENGTH - 4.5), 11);
+
+        const wideTarget = sameSideAsBall ? wingSign * 12.2 : wingSign * 10.6;
+        baseZ = THREE.MathUtils.clamp(
+          wideTarget + ballLateral * 0.18,
+          -(HALF_WIDTH - 2.0),
+          HALF_WIDTH - 2.0,
+        );
       } else {
-        // AVA: spearhead run ahead of the ball
-        const targetAhead = ballPos.x + dir * 11;
-        baseX = dir === 1
-          ? THREE.MathUtils.clamp(targetAhead, -4, HALF_LENGTH - 3.2)
-          : THREE.MathUtils.clamp(targetAhead, -(HALF_LENGTH - 3.2), 4);
-        baseZ = THREE.MathUtils.clamp(-ballLateral * 0.35, -7.5, 7.5);
+        // AVA: stretches highest defensive line in opposite channel to ball
+        const targetAhead = ballPos.x + dir * (12.2 + pushOffset * 0.45);
+        baseX =
+          dir === 1
+            ? THREE.MathUtils.clamp(targetAhead, -1.5, HALF_LENGTH - 2.6)
+            : THREE.MathUtils.clamp(targetAhead, -(HALF_LENGTH - 2.6), 1.5);
+        const oppChannel = ballLateral > 2.2 ? -6.2 : ballLateral < -2.2 ? 6.2 : 0;
+        baseZ = THREE.MathUtils.clamp(oppChannel - ballLateral * 0.14, -8.8, 8.8);
       }
     } else {
-      // Defensive shape: compact block between ball and own goal
-      const shiftX = ballProgress * 12 * dir;
+      // Defensive compact staggered block protecting central corridor without clustering
+      const compactness = tactic === 'defensive' ? 0.84 : 1.0;
+      const shiftX = ballProgress * 11.2 * dir;
+
       if (player.role === 'DEF') {
-        baseX = -dir * 19 + shiftX * 0.55;
-        baseZ = THREE.MathUtils.clamp(ballLateral * 0.45, -6.5, 6.5);
+        baseX = -dir * (tactic === 'defensive' ? 22.8 : 19.6) + shiftX * 0.52;
+        baseZ = THREE.MathUtils.clamp(ballLateral * 0.38, -5.6, 5.6);
       } else if (player.role === 'MED') {
         const isLeftMid = player.homeAnchor.z < 0;
         const wingSign = isLeftMid ? -1 : 1;
-        baseX = -dir * 9.5 + shiftX * 0.72;
-        baseZ = THREE.MathUtils.clamp(wingSign * 6.8 + ballLateral * 0.35, -HALF_WIDTH + 3, HALF_WIDTH - 3);
+        baseX = -dir * (tactic === 'defensive' ? 13.8 : 10.0) + shiftX * 0.72;
+        baseZ = THREE.MathUtils.clamp(
+          wingSign * 7.6 * compactness + ballLateral * 0.32,
+          -(HALF_WIDTH - 2.6),
+          HALF_WIDTH - 2.6,
+        );
       } else {
-        // AVA stays higher as outlet / first press
-        baseX = -dir * 1.5 + shiftX * 0.85;
-        baseZ = THREE.MathUtils.clamp(ballLateral * 0.3, -6, 6);
+        // AVA holds midfield outlet / first pressing line
+        baseX = -dir * (tactic === 'defensive' ? 5.2 : 1.2) + shiftX * 0.8;
+        baseZ = THREE.MathUtils.clamp(-ballLateral * 0.18, -6.0, 6.0);
       }
     }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Camera,
   Gamepad2,
+  Mic,
   Pause,
   Volume2,
   VolumeX,
@@ -20,6 +21,7 @@ interface GameHUDProps {
   onZoomDelta: (delta: number) => void;
   onToggleSound: () => void;
   onToggleTouchControls: () => void;
+  onRequestLandscape: () => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -31,6 +33,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onZoomDelta,
   onToggleSound,
   onToggleTouchControls,
+  onRequestLandscape,
 }) => {
   const joystickZoneRef = useRef<HTMLDivElement | null>(null);
   const joystickKnobRef = useRef<HTMLDivElement | null>(null);
@@ -81,52 +84,52 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <div className="hud-layer">
       {/* Top Broadcast Scoreboard & Quick Action Cluster */}
-      <div className="flex items-start justify-between p-2.5 sm:p-4 gap-2">
+      <div className="flex items-start justify-between px-2 pt-1.5 sm:p-3 gap-2">
         {/* Top-left Scorebug */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center rounded-lg overflow-hidden bg-[#09121e]/92 border border-white/15 shadow-lg">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center rounded-lg overflow-hidden bg-[#09121e]/88 border border-white/15 shadow-lg">
             {/* Home */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+            <div className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5">
               <span
-                className="w-2.5 h-3.5 rounded-xs"
+                className="w-2 h-3 rounded-xs"
                 style={{ backgroundColor: snapshot.homeTeam.primaryColor }}
               />
-              <span className="font-display text-sm sm:text-base font-bold text-white tracking-wide">
+              <span className="font-display text-xs sm:text-base font-bold text-white tracking-wide">
                 {snapshot.homeTeam.shortName}
               </span>
             </div>
 
             {/* Score */}
-            <div className="px-2.5 py-1.5 bg-white/10 font-display text-base sm:text-lg font-extrabold text-white font-mono-num">
+            <div className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-white/10 font-display text-sm sm:text-lg font-extrabold text-white font-mono-num">
               {snapshot.homeScore} - {snapshot.awayScore}
             </div>
 
             {/* Away */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-              <span className="font-display text-sm sm:text-base font-bold text-white tracking-wide">
+            <div className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5">
+              <span className="font-display text-xs sm:text-base font-bold text-white tracking-wide">
                 {snapshot.awayTeam.shortName}
               </span>
               <span
-                className="w-2.5 h-3.5 rounded-xs"
+                className="w-2 h-3 rounded-xs"
                 style={{ backgroundColor: snapshot.awayTeam.primaryColor }}
               />
             </div>
 
             {/* Clock */}
-            <div className="px-2.5 py-1.5 bg-sky-600/90 font-mono-num text-xs sm:text-sm font-bold text-white">
+            <div className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-sky-600/90 font-mono-num text-[11px] sm:text-sm font-bold text-white">
               {clockStr}
             </div>
 
             {/* Half / Mode */}
-            <div className="hidden sm:block px-2 py-1.5 text-[11px] font-semibold text-slate-200 bg-black/35">
+            <div className="hidden md:block px-2 py-1.5 text-[11px] font-semibold text-slate-200 bg-black/35">
               {snapshot.mode === 'training'
                 ? 'TREINO'
                 : `${snapshot.half}.ª PARTE`}
             </div>
           </div>
 
-          {/* Possession & Attack Direction Indicator */}
-          <div className="flex items-center gap-2 text-[11px] text-slate-200 bg-[#09121e]/85 border border-white/10 rounded-md px-2.5 py-1 w-fit">
+          {/* Possession & Status Toast */}
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-200 bg-[#09121e]/80 border border-white/10 rounded-md px-2 py-0.5 w-fit">
             <span>
               Posse:{' '}
               <strong className="font-mono-num text-sky-300">
@@ -144,6 +147,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </>
             )}
           </div>
+
+          {/* Broadcast Commentator Caption Strip */}
+          {settings.commentatorEnabled && snapshot.commentaryLine && (
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-100 bg-[#09121e]/86 border border-amber-400/35 rounded-md px-2 py-0.5 max-w-[260px] sm:max-w-[380px] shadow-md">
+              <Mic className="w-3 h-3 text-amber-400 shrink-0" />
+              <span className="truncate font-medium">{snapshot.commentaryLine}</span>
+            </div>
+          )}
         </div>
 
         {/* Top-right compact utility buttons */}
@@ -210,8 +221,27 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
       </div>
 
+      {/* Kickoff Prompt Banner */}
+      {snapshot.phase === 'KICKOFF' && (
+        <div className="absolute inset-x-0 top-[14%] flex justify-center pointer-events-none">
+          <div className="px-4 py-2 rounded-xl bg-[#07111a]/90 border border-sky-400/50 shadow-xl text-center">
+            <div className="font-display text-sm sm:text-base font-extrabold text-sky-300 tracking-wide uppercase">
+              Pontapé de Saída ·{' '}
+              {snapshot.kickoffTeam === 'home'
+                ? snapshot.homeTeam.name
+                : snapshot.awayTeam.name}
+            </div>
+            <div className="text-[11px] sm:text-xs font-medium text-slate-200 mt-0.5">
+              {snapshot.kickoffTeam === 'home'
+                ? 'Prime ✕ (Passe) para iniciar a partida'
+                : 'Equipa adversária a preparar o pontapé de saída...'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Goal Celebration Overlay Banner */}
-      {snapshot.phase === 'GOAL_CELEBRATION' && (
+      {snapshot.phase === 'GOAL' && (
         <div className="absolute inset-x-0 top-[22%] flex justify-center pointer-events-none">
           <div className="goal-banner-anim px-8 py-4 rounded-2xl bg-[#07111a]/92 border-2 border-amber-400 shadow-2xl text-center">
             <div className="font-display text-4xl sm:text-6xl font-extrabold text-amber-400 tracking-wider leading-none">
@@ -231,11 +261,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
       )}
 
-      {/* Bottom Center: Active Player Bar + Tactical Pitch Radar */}
-      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none">
+      {/* Bottom Center: Active Player Bar + Compact Tactical Pitch Radar */}
+      <div className="absolute bottom-1.5 sm:bottom-2.5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
         {/* Shot charge meter */}
         {snapshot.shotCharge > 0.05 && (
-          <div className="w-36 h-2.5 rounded-full bg-black/70 border border-white/25 overflow-hidden">
+          <div className="w-28 sm:w-36 h-2 rounded-full bg-black/70 border border-white/25 overflow-hidden">
             <div
               className="h-full transition-none"
               style={{
@@ -252,7 +282,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         )}
 
         {/* Active Player Info */}
-        <div className="flex items-center gap-2.5 px-3 py-1 rounded-md bg-[#09121e]/90 border border-white/12 text-xs">
+        <div className="flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-[#09121e]/82 border border-white/12 text-[11px]">
           <span className="font-mono-num font-bold text-sky-400">
             #{snapshot.activePlayerNumber}
           </span>
@@ -260,7 +290,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             {snapshot.activePlayerName}
           </span>
           <span className="text-[10px] text-slate-400">{snapshot.activePlayerRole}</span>
-          <div className="w-12 h-1.5 rounded-full bg-white/15 overflow-hidden">
+          <div className="w-10 h-1.5 rounded-full bg-white/15 overflow-hidden">
             <div
               className="h-full bg-emerald-400"
               style={{ width: `${snapshot.activePlayerStamina}%` }}
@@ -268,12 +298,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
 
-        {/* Tactical Radar */}
+        {/* Compact Tactical Radar */}
         <svg
-          width="136"
-          height="84"
           viewBox="-34 -22 68 44"
-          className="rounded-lg bg-[#0d3b1e]/85 border border-white/20 shadow-md"
+          className="w-[96px] h-[58px] sm:w-[126px] sm:h-[76px] rounded-md bg-[#0d3b1e]/75 border border-white/20 shadow-md"
           aria-label="Radar do campo"
         >
           <rect
@@ -367,8 +395,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               className="psp-btn psp-btn-top"
               {...bindBtn('triangle')}
             >
-              <span className="text-sm font-bold text-emerald-400 leading-none">△</span>
-              <span className="text-[9px] font-semibold text-slate-200 leading-tight mt-0.5">
+              <span className="text-xs sm:text-sm font-bold text-emerald-400 leading-none">△</span>
+              <span className="text-[8px] font-semibold text-slate-200 leading-tight mt-0.5">
                 {offense ? 'Longo' : 'Trocar'}
               </span>
             </button>
@@ -379,8 +407,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               className="psp-btn psp-btn-left"
               {...bindBtn('square')}
             >
-              <span className="text-sm font-bold text-pink-400 leading-none">□</span>
-              <span className="text-[9px] font-semibold text-slate-200 leading-tight mt-0.5">
+              <span className="text-xs sm:text-sm font-bold text-pink-400 leading-none">□</span>
+              <span className="text-[8px] font-semibold text-slate-200 leading-tight mt-0.5">
                 {offense ? 'Remate' : 'Pressão'}
               </span>
             </button>
@@ -391,8 +419,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               className="psp-btn psp-btn-right"
               {...bindBtn('circle')}
             >
-              <span className="text-sm font-bold text-rose-400 leading-none">◯</span>
-              <span className="text-[9px] font-semibold text-slate-200 leading-tight mt-0.5">
+              <span className="text-xs sm:text-sm font-bold text-rose-400 leading-none">◯</span>
+              <span className="text-[8px] font-semibold text-slate-200 leading-tight mt-0.5">
                 {offense ? 'Cruzar' : 'Desarme'}
               </span>
             </button>
@@ -403,8 +431,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               className="psp-btn psp-btn-bottom"
               {...bindBtn('cross')}
             >
-              <span className="text-sm font-bold text-sky-400 leading-none">✕</span>
-              <span className="text-[9px] font-semibold text-slate-200 leading-tight mt-0.5">
+              <span className="text-xs sm:text-sm font-bold text-sky-400 leading-none">✕</span>
+              <span className="text-[8px] font-semibold text-slate-200 leading-tight mt-0.5">
                 {offense ? 'Passe' : 'Pressionar'}
               </span>
             </button>
@@ -412,9 +440,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </>
       )}
 
-      {/* Portrait Mobile Orientation Suggestion Banner */}
-      <div className="portrait-hint fixed top-16 inset-x-4 z-30 p-2.5 rounded-lg bg-amber-950/95 border border-amber-400/50 text-amber-100 text-xs items-center justify-center text-center pointer-events-none">
-        Roda o telemóvel para o modo paisagem (horizontal) para melhor experiência PSP.
+      {/* Portrait Mobile Orientation Banner with one-tap Android Landscape/Fullscreen lock */}
+      <div className="portrait-hint hud-interactive fixed top-14 inset-x-4 z-30 p-2.5 rounded-lg bg-amber-950/95 border border-amber-400/50 text-amber-100 text-xs items-center justify-between gap-2 shadow-xl">
+        <span>Roda o telemóvel para paisagem (horizontal) para jogar melhor.</span>
+        <button
+          type="button"
+          onClick={onRequestLandscape}
+          className="shrink-0 px-2.5 py-1 rounded-md bg-amber-500 text-slate-950 font-bold cursor-pointer"
+        >
+          Paisagem
+        </button>
       </div>
     </div>
   );

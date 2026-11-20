@@ -36,12 +36,18 @@ export class Player {
   public facingAngle = 0; // radians; 0 = +Z, PI/2 = +X, -PI/2 = -X
   public stamina = 100;
   public touchCooldown = 0;
+  public ownKickGraceTimer = 0;
   public stunTimer = 0;
   public tackleTimer = 0;
   public tackleCooldown = 0;
   public isHumanControlled = false;
   public isSupportingPress = false;
   public isCelebrating = false;
+  public isSprinting = false;
+  public isBraking = false;
+  public isShielding = false;
+  public shieldAwayX = 0;
+  public shieldAwayZ = 0;
   public aiState: AIState = 'RETREAT';
   public aiDecisionTimer = 0;
 
@@ -84,11 +90,15 @@ export class Player {
     this.prevFacing = facing;
     this.prevSpeed = 0;
     this.touchCooldown = 0;
+    this.ownKickGraceTimer = 0;
     this.stunTimer = 0;
     this.tackleTimer = 0;
     this.tackleCooldown = 0;
     this.isCelebrating = false;
     this.isSupportingPress = false;
+    this.isSprinting = false;
+    this.isBraking = false;
+    this.isShielding = false;
     this.syncVisuals();
   }
 
@@ -100,23 +110,30 @@ export class Player {
     dt: number,
   ): void {
     if (this.stunTimer > 0) {
+      this.isSprinting = false;
+      this.isBraking = false;
       this.velocity.multiplyScalar(Math.exp(-8 * dt));
       this.integratePosition(dt);
       return;
     }
 
     if (this.tackleTimer > 0) {
-      this.velocity.multiplyScalar(Math.exp(-3.4 * dt));
+      this.isSprinting = false;
+      this.isBraking = false;
+      this.velocity.multiplyScalar(Math.exp(-3.3 * dt));
       this.integratePosition(dt);
       return;
     }
 
     const inputLen = Math.hypot(dirX, dirZ);
-    const baseWalk = 5.4 * this.speedStat;
-    const baseSprint = 7.7 * this.speedStat;
-    const dribblePenalty = hasBall ? 0.91 : 1.0;
+    const currentSpeed = Math.hypot(this.velocity.x, this.velocity.z);
 
-    const canSprint = sprint && this.stamina > 8;
+    const baseWalk = 5.45 * this.speedStat;
+    const baseSprint = 7.85 * this.speedStat;
+    const dribblePenalty = hasBall ? (this.isShielding ? 0.64 : 0.91) : 1.0;
+
+    const canSprint = sprint && this.stamina > 8 && !this.isShielding;
+    this.isSprinting = canSprint && inputLen > 0.35;
     const maxSpeed = (canSprint ? baseSprint : baseWalk) * dribblePenalty;
 
     if (inputLen > 0.08) {
@@ -124,28 +141,48 @@ export class Player {
       const nz = dirZ / inputLen;
       const targetSpeed = maxSpeed * Math.min(1, inputLen);
 
-      const accel = 11.5;
+      // Detect active braking / sharp reversal for realistic momentum & animation
+      let dotVel = 1;
+      if (currentSpeed > 1.2) {
+        dotVel = (this.velocity.x * nx + this.velocity.z * nz) / currentSpeed;
+      }
+      this.isBraking = currentSpeed > 2.2 && dotVel < -0.2;
+
+      // Progressive acceleration: heavier from full reversal or sprint, snappier when dribbling at low speed
+      const accel = this.isBraking
+        ? 13.5
+        : currentSpeed < 2.2
+          ? 8.8
+          : hasBall
+            ? 9.6
+            : 10.6;
+
       this.velocity.x = THREE.MathUtils.damp(this.velocity.x, nx * targetSpeed, accel, dt);
       this.velocity.z = THREE.MathUtils.damp(this.velocity.z, nz * targetSpeed, accel, dt);
 
       const desiredAngle = Math.atan2(nx, nz);
       const angleDiff = normalizeAngle(desiredAngle - this.facingAngle);
-      const turnSpeed = hasBall ? 9.5 : 13.0;
+      // Natural turn rate: nimble when slow/walking, wider athletic turning arc at high sprint
+      const speedTurnScale = THREE.MathUtils.clamp(1.12 - currentSpeed * 0.048, 0.62, 1.12);
+      const baseTurn = hasBall ? 9.8 : 13.4;
+      const turnSpeed = baseTurn * speedTurnScale;
+
       this.facingAngle = normalizeAngle(
         this.facingAngle + THREE.MathUtils.clamp(angleDiff, -turnSpeed * dt, turnSpeed * dt),
       );
 
-      if (canSprint && inputLen > 0.6) {
-        this.stamina = Math.max(0, this.stamina - 16 * dt);
+      if (this.isSprinting && inputLen > 0.6) {
+        this.stamina = Math.max(0, this.stamina - 15 * dt);
       } else {
-        this.stamina = Math.min(100, this.stamina + 9 * dt);
+        this.stamina = Math.min(100, this.stamina + 9.5 * dt);
       }
     } else {
-      // Smooth deceleration
-      const decel = 9.2;
+      // Progressive natural deceleration (coasting to a stop)
+      this.isBraking = currentSpeed > 2.5;
+      const decel = currentSpeed > 4.0 ? 8.2 : 10.4;
       this.velocity.x = THREE.MathUtils.damp(this.velocity.x, 0, decel, dt);
       this.velocity.z = THREE.MathUtils.damp(this.velocity.z, 0, decel, dt);
-      this.stamina = Math.min(100, this.stamina + 14 * dt);
+      this.stamina = Math.min(100, this.stamina + 14.5 * dt);
     }
 
     this.integratePosition(dt);
@@ -168,19 +205,22 @@ export class Player {
     const nx = dirX / len;
     const nz = dirZ / len;
     this.facingAngle = Math.atan2(nx, nz);
-    this.velocity.set(nx * 10.6, 0, nz * 10.6);
-    this.tackleTimer = 0.44;
+    this.velocity.set(nx * 10.8, 0, nz * 10.8);
+    this.tackleTimer = 0.46;
     this.tackleCooldown = 1.05;
-    this.animation.triggerAction('tackle', 0.44);
+    this.isShielding = false;
+    this.animation.triggerAction('tackle', 0.46);
   }
 
   public tickTimersAndAnimation(dt: number, hasBall: boolean): void {
     if (this.touchCooldown > 0) this.touchCooldown = Math.max(0, this.touchCooldown - dt);
+    if (this.ownKickGraceTimer > 0) this.ownKickGraceTimer = Math.max(0, this.ownKickGraceTimer - dt);
     if (this.stunTimer > 0) this.stunTimer = Math.max(0, this.stunTimer - dt);
     if (this.tackleTimer > 0) this.tackleTimer = Math.max(0, this.tackleTimer - dt);
     if (this.tackleCooldown > 0) this.tackleCooldown = Math.max(0, this.tackleCooldown - dt);
     if (this.aiDecisionTimer > 0) this.aiDecisionTimer = Math.max(0, this.aiDecisionTimer - dt);
     if (this.dribbleTouchTimer > 0) this.dribbleTouchTimer = Math.max(0, this.dribbleTouchTimer - dt);
+    if (!hasBall) this.isShielding = false;
 
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
     const accelRate = (speed - this.prevSpeed) / Math.max(dt, 0.001);
@@ -196,6 +236,8 @@ export class Player {
       turnRate,
       hasBall,
       this.isCelebrating,
+      this.isBraking,
+      this.isShielding,
     );
 
     this.model.rig.selectionRing.visible = this.isHumanControlled && !this.isCelebrating;
@@ -204,9 +246,9 @@ export class Player {
     this.syncVisuals();
   }
 
-  public canDribbleNudge(): boolean {
+  public canDribbleNudge(sprint = false): boolean {
     if (this.dribbleTouchTimer <= 0) {
-      this.dribbleTouchTimer = 0.14;
+      this.dribbleTouchTimer = sprint ? 0.19 : 0.13;
       return true;
     }
     return false;

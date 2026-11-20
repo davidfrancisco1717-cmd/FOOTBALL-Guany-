@@ -35,10 +35,10 @@ export class Team {
     // Coordinates in team-relative space where -X is own half
     const kickoffSpots: [number, number][] = [
       [-HALF_LENGTH + 1.4, 0], // GR
-      [-15.5, 0], // DEF
-      [-8.5, -7.5], // MED L
-      [-8.5, 7.5], // MED R
-      [isKickoffTeam ? -0.6 : -6.2, 0], // AVA
+      [-17.5, 0], // DEF
+      [-8.2, -9.8], // MED L
+      [-8.2, 9.8], // MED R
+      [isKickoffTeam ? -0.44 : -6.2, 0], // AVA
     ];
 
     const [rx, rz] = kickoffSpots[roleIndex] ?? [-10, 0];

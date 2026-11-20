@@ -7,21 +7,32 @@ export type PlayerAnimState =
   | 'walk'
   | 'run'
   | 'sprint'
+  | 'brake'
+  | 'turn'
   | 'dribble'
+  | 'shield'
+  | 'firstTouch'
   | 'pass'
   | 'shoot'
+  | 'lowShot'
+  | 'finesseShot'
+  | 'volley'
   | 'cross'
   | 'jump'
   | 'header'
   | 'tackle'
   | 'fall'
   | 'celebrate'
-  | 'gkSave';
+  | 'gkSave'
+  | 'gkLowSave'
+  | 'gkCatch';
 
 export type AIState =
   | 'ATTACK_CARRY'
   | 'ATTACK_SUPPORT'
+  | 'ATTACK_RUN'
   | 'DEFEND_MARK'
+  | 'INTERCEPT_PASS'
   | 'PRESS_BALL'
   | 'RECOVER_LOOSE'
   | 'SHOOT'
@@ -40,9 +51,11 @@ export type TouchControlsMode = 'auto' | 'always' | 'hidden';
 export type GameMode = 'quick_match' | 'training';
 
 export type MatchPhase =
-  | 'PRE_KICKOFF'
-  | 'LIVE'
-  | 'GOAL_CELEBRATION'
+  | 'PRE_MATCH'
+  | 'KICKOFF'
+  | 'PLAYING'
+  | 'GOAL'
+  | 'RESET'
   | 'OUT_OF_BOUNDS'
   | 'HALFTIME'
   | 'FULLTIME';
@@ -65,6 +78,7 @@ export interface GameSettings {
   cameraZoom: number; // 0.75 .. 1.35
   touchControlsMode: TouchControlsMode;
   soundEnabled: boolean;
+  commentatorEnabled: boolean;
   volume: number; // 0 .. 1
   matchMinutes: 2 | 3 | 5;
 }
@@ -78,6 +92,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cameraZoom: 1.0,
   touchControlsMode: 'auto',
   soundEnabled: true,
+  commentatorEnabled: true,
   volume: 0.75,
   matchMinutes: 3,
 };
@@ -276,6 +291,7 @@ export interface HudSnapshot {
   displaySecond: number;
   half: 1 | 2;
   phase: MatchPhase;
+  kickoffTeam: TeamSide;
   mode: GameMode;
   possessionTeam: TeamSide | null;
   homePossessionPct: number;
@@ -288,6 +304,7 @@ export interface HudSnapshot {
   lastGoalScorer: string;
   lastGoalTeam: TeamSide | null;
   statusToast: string;
+  commentaryLine: string;
   homeShots: number;
   awayShots: number;
   homePasses: number;

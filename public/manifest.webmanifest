@@ -1,0 +1,11 @@
+{
+  "name": "FOOTBALL PSP 3D",
+  "short_name": "Football PSP 3D",
+  "description": "Jogo de futebol 3D completo no navegador inspirado nos clássicos da PSP.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07111a",
+  "theme_color": "#07111a",
+  "lang": "pt"
+}

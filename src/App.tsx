@@ -30,6 +30,38 @@ function loadSavedSettings(): GameSettings {
   }
 }
 
+function isLikelyMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(pointer: coarse)').matches ||
+    /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  );
+}
+
+async function tryEnterAndroidLandscape(): Promise<void> {
+  if (!isLikelyMobileDevice()) return;
+  try {
+    const docEl = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    };
+    if (!document.fullscreenElement) {
+      if (docEl.requestFullscreen) {
+        await Promise.resolve(docEl.requestFullscreen({ navigationUI: 'hide' })).catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        await Promise.resolve(docEl.webkitRequestFullscreen()).catch(() => {});
+      }
+    }
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (orientation: 'landscape') => Promise<void>;
+    };
+    if (orientation?.lock) {
+      await Promise.resolve(orientation.lock('landscape')).catch(() => {});
+    }
+  } catch {
+    // Graceful no-op when fullscreen/orientation lock is blocked by browser/iframe policy
+  }
+}
+
 export default function App() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Game | null>(null);
@@ -139,6 +171,7 @@ export default function App() {
 
   const launchMatch = useCallback(
     (mode: GameMode) => {
+      void tryEnterAndroidLandscape();
       setMatchMode(mode);
       gameRef.current?.audio.playUiClick();
       gameRef.current?.startMatch(mode, homeTeam, awayTeam);
@@ -146,6 +179,10 @@ export default function App() {
     },
     [homeTeam, awayTeam],
   );
+
+  const handleRequestLandscape = useCallback(() => {
+    void tryEnterAndroidLandscape();
+  }, []);
 
   const handlePause = useCallback(() => {
     gameRef.current?.audio.playUiClick();
@@ -285,6 +322,7 @@ export default function App() {
           onZoomDelta={handleZoomDelta}
           onToggleSound={handleToggleSound}
           onToggleTouchControls={handleToggleTouchControls}
+          onRequestLandscape={handleRequestLandscape}
         />
       )}
 

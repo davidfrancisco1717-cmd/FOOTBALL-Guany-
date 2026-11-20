@@ -17,6 +17,7 @@ import { PlayerController } from './PlayerController';
 import { SceneManager } from './SceneManager';
 import { Stadium } from './Stadium';
 import { Team } from './Team';
+import { TurfMarks } from './TurfMarks';
 import {
   BALL_RADIUS,
   DEFAULT_SETTINGS,
@@ -57,6 +58,7 @@ export class Game {
   private readonly awayGkAI = new GoalkeeperAI();
   private readonly matchManager = new MatchManager();
   private readonly matchRules = new MatchRules();
+  private readonly turfMarks: TurfMarks;
 
   private homeTeam!: Team;
   private awayTeam!: Team;
@@ -72,6 +74,7 @@ export class Game {
   private hudEmitAccum = 0;
   private elapsedTotal = 0;
   private scorerRef: Player | null = null;
+  private aiKickoffDelay = 0;
   private callbacks: GameCallbacks;
   private detachKeyboard: () => void;
   private resizeHandler: () => void;
@@ -95,9 +98,11 @@ export class Game {
     this.pitch = new Pitch(this.sceneManager.maxAnisotropy);
     this.stadium = new Stadium(this.sceneManager.maxAnisotropy);
     this.ballVisual = new Ball(this.sceneManager.maxAnisotropy);
+    this.turfMarks = new TurfMarks(this.sceneManager.maxAnisotropy);
 
     this.sceneManager.scene.add(this.stadium.group);
     this.sceneManager.scene.add(this.pitch.group);
+    this.sceneManager.scene.add(this.turfMarks.group);
     this.sceneManager.scene.add(this.ballVisual.group);
 
     this.keyboardControls = new KeyboardControls({
@@ -118,12 +123,21 @@ export class Game {
 
     this.resizeHandler = () => {
       this.sceneManager.resize(this.cameraController.camera);
+      this.cameraController.setAspect(this.cameraController.camera.aspect);
     };
     window.addEventListener('resize', this.resizeHandler);
+    window.addEventListener('orientationchange', this.resizeHandler);
 
     this.buildTeams(this.homePreset, this.awayPreset);
     this.setStadiumTime(this.stadiumTime);
-    this.audio.setSettings(this.settings.soundEnabled, this.settings.volume);
+    this.audio.setSettings(
+      this.settings.soundEnabled,
+      this.settings.volume,
+      this.settings.commentatorEnabled,
+    );
+    this.audio.setCommentaryLineCallback((line, durationMs) => {
+      this.matchManager.setCommentaryLine(line, durationMs / 1000);
+    });
 
     if (!this.sceneManager.isSoftwareGl) {
       this.sceneManager.renderer.compile(this.sceneManager.scene, this.cameraController.camera);
@@ -162,9 +176,16 @@ export class Game {
     this.homeTeam.resetForKickoff(kickoffTeam === 'home');
     this.awayTeam.resetForKickoff(kickoffTeam === 'away');
     this.ballPhysics.resetTo(0, 0, BALL_RADIUS);
+    const kickoffTeamRef = kickoffTeam === 'home' ? this.homeTeam : this.awayTeam;
+    const taker = kickoffTeamRef.players[4];
+    if (taker) {
+      this.ballPhysics.owner = taker;
+      this.ballPhysics.lastTouchedBy = taker;
+    }
     this.ballVisual.syncTransform(this.ballPhysics.position, this.ballPhysics.quaternion);
     this.playerController.setActivePlayer(this.homeTeam.players[4]);
     this.scorerRef = null;
+    this.aiKickoffDelay = kickoffTeam === 'away' ? 0.78 : 0;
   }
 
   public setTeams(home: TeamPreset, away: TeamPreset): void {
@@ -185,18 +206,26 @@ export class Game {
     this.cameraController.setMode(this.settings.cameraMode);
     this.cameraController.setZoom(this.settings.cameraZoom);
     this.loop.setFpsLimit(this.settings.fpsLimit);
-    this.audio.setSettings(this.settings.soundEnabled, this.settings.volume);
+    this.audio.setSettings(
+      this.settings.soundEnabled,
+      this.settings.volume,
+      this.settings.commentatorEnabled,
+    );
   }
 
   public startMatch(mode: GameMode, home: TeamPreset, away: TeamPreset): void {
     this.audio.unlock();
     this.buildTeams(home, away);
     this.matchManager.startNewMatch(mode, this.settings.matchMinutes);
+    this.turfMarks.clear();
     this.isInMatchView = true;
     this.isPaused = false;
     this.touchControls.clearAll();
     this.cameraController.snapToGameplay(this.ballPhysics.position);
     this.audio.playWhistle('kickoff');
+    if (mode === 'quick_match') {
+      this.audio.playCommentary('kickoff');
+    }
     this.updateStadiumScoreboard(false);
     this.emitHudSnapshot();
   }
@@ -204,13 +233,16 @@ export class Game {
   public setMenuMode(): void {
     this.isInMatchView = false;
     this.isPaused = false;
+    this.audio.cancelCommentary();
     this.touchControls.clearAll();
+    this.turfMarks.clear();
     this.resetKickoffPositions('home');
   }
 
   public setPaused(paused: boolean): void {
     this.isPaused = paused;
     if (paused) {
+      this.audio.cancelCommentary();
       this.touchControls.clearAll();
     }
   }
@@ -263,6 +295,7 @@ export class Game {
       displaySecond: clock.second,
       half: this.matchManager.half,
       phase: this.matchManager.phase,
+      kickoffTeam: this.matchManager.kickoffTeam,
       mode: this.matchManager.mode,
       possessionTeam: owner ? owner.side : this.ballPhysics.lastTouchedBy?.side ?? null,
       homePossessionPct: this.matchManager.getHomePossessionPct(),
@@ -275,6 +308,7 @@ export class Game {
       lastGoalScorer: this.matchManager.lastGoalScorer,
       lastGoalTeam: this.matchManager.lastGoalTeam,
       statusToast: this.matchManager.statusToast,
+      commentaryLine: this.matchManager.commentaryLine,
       homeShots: this.matchManager.homeShots,
       awayShots: this.matchManager.awayShots,
       homePasses: this.matchManager.homePasses,
@@ -311,12 +345,17 @@ export class Game {
       moveZ: hasTouchMove ? touch.moveZ : key.moveZ,
       sprint: touch.sprint || key.sprint,
       crossHeld: touch.crossHeld || key.crossHeld,
+      triangleHeld: touch.triangleHeld || key.triangleHeld,
+      circleHeld: touch.circleHeld || key.circleHeld,
       squareHeld: touch.squareHeld || key.squareHeld,
       doublePressHeld: touch.doublePressHeld || key.doublePressHeld,
       justPressedCross: touch.justPressedCross || key.justPressedCross,
       justPressedTriangle: touch.justPressedTriangle || key.justPressedTriangle,
       justPressedCircle: touch.justPressedCircle || key.justPressedCircle,
       justPressedSquare: touch.justPressedSquare || key.justPressedSquare,
+      justReleasedCross: touch.justReleasedCross || key.justReleasedCross,
+      justReleasedTriangle: touch.justReleasedTriangle || key.justReleasedTriangle,
+      justReleasedCircle: touch.justReleasedCircle || key.justReleasedCircle,
       justReleasedSquare: touch.justReleasedSquare || key.justReleasedSquare,
     };
   }
@@ -339,17 +378,27 @@ export class Game {
       return;
     }
 
+    const prevPhase = this.matchManager.phase;
     const phaseEvent = this.matchManager.tick(dt);
-    if (phaseEvent === 'kickoff_live') {
+    if (prevPhase === 'PLAYING' && this.matchManager.phase === 'HALFTIME') {
       this.audio.playWhistle('short');
-    } else if (phaseEvent === 'reset_kickoff' || phaseEvent === 'halftime') {
+      this.audio.playCommentary('halftime');
+    }
+
+    if (phaseEvent === 'enter_reset' || phaseEvent === 'halftime') {
       this.resetKickoffPositions(this.matchManager.kickoffTeam);
-      if (phaseEvent === 'halftime') {
-        this.audio.playWhistle('kickoff');
-      }
+      this.cameraController.snapToGameplay(this.ballPhysics.position);
+      this.emitHudSnapshot();
+    } else if (phaseEvent === 'enter_kickoff') {
+      this.aiKickoffDelay = this.matchManager.kickoffTeam === 'away' ? 0.78 : 0;
+      this.audio.playWhistle('kickoff');
+      this.emitHudSnapshot();
+    } else if (phaseEvent === 'restart_live') {
+      this.audio.playWhistle('short');
       this.emitHudSnapshot();
     } else if (phaseEvent === 'fulltime') {
       this.audio.playWhistle('fulltime');
+      this.audio.playCommentary('fulltime');
       const snap = this.getHudSnapshot();
       this.emitHudSnapshot();
       this.callbacks.onMatchFinished?.(snap);
@@ -362,12 +411,90 @@ export class Game {
         ? [...this.homeTeam.players, this.awayTeam.getGoalkeeper()]
         : [...this.homeTeam.players, ...this.awayTeam.players];
 
-    if (this.matchManager.phase === 'LIVE') {
+    const phase = this.matchManager.phase;
+
+    if (phase === 'PRE_MATCH' || phase === 'RESET' || phase === 'HALFTIME') {
+      // Discard inputs while players settle in kickoff positions; hold ball at center
+      this.mergeInputs();
+      allPlayers.forEach((p) => p.steer(0, 0, false, this.ballPhysics.owner === p, dt));
+      this.ballPhysics.step(dt);
+    } else if (phase === 'KICKOFF') {
+      const mergedInput = this.mergeInputs();
+      const kickoffSide = this.matchManager.kickoffTeam;
+
+      // Both AI teams strictly hold regulation kickoff positions until kickoff pass is executed
+      this.footballAI.updateTeamAI(
+        this.homeTeam,
+        this.awayTeam,
+        this.ballPhysics,
+        dt,
+        elapsed,
+        false,
+        0,
+        undefined,
+        'KICKOFF',
+      );
+      this.footballAI.updateTeamAI(
+        this.awayTeam,
+        this.homeTeam,
+        this.ballPhysics,
+        dt,
+        elapsed,
+        this.matchManager.mode === 'training',
+        0,
+        undefined,
+        'KICKOFF',
+      );
+
+      const kicked = this.playerController.updateKickoff(
+        this.homeTeam,
+        this.awayTeam,
+        this.ballPhysics,
+        mergedInput,
+        kickoffSide,
+        dt,
+        elapsed,
+        {
+          onPass: () => {
+            this.matchManager.homePasses++;
+            this.audio.playKick(0.48);
+          },
+        },
+      );
+
+      if (kicked) {
+        this.matchManager.executeKickoff();
+        this.audio.playWhistle('short');
+        this.emitHudSnapshot();
+      } else if (kickoffSide === 'away') {
+        this.aiKickoffDelay -= dt;
+        if (this.aiKickoffDelay <= 0) {
+          this.footballAI.executeAIKickoffPass(
+            this.awayTeam,
+            this.homeTeam,
+            this.ballPhysics,
+            elapsed,
+            {
+              onPass: () => {
+                this.matchManager.awayPasses++;
+                this.audio.playKick(0.48);
+              },
+            },
+          );
+          this.matchManager.executeKickoff();
+          this.audio.playWhistle('short');
+          this.emitHudSnapshot();
+        }
+      }
+
+      this.ballPhysics.step(dt);
+    } else if (phase === 'PLAYING') {
       const mergedInput = this.mergeInputs();
 
       // 1. Human player control
       const ctrlState = this.playerController.update(
         this.homeTeam,
+        this.awayTeam,
         this.ballPhysics,
         mergedInput,
         dt,
@@ -376,14 +503,20 @@ export class Game {
           onPass: (_passer, _receiver, isLong) => {
             this.matchManager.homePasses++;
             this.audio.playKick(isLong ? 0.72 : 0.45);
+            this.audio.reactCrowd(isLong ? 'long_pass' : 'pass', isLong ? 0.72 : 0.45);
           },
           onCross: () => {
             this.matchManager.homePasses++;
             this.audio.playKick(0.8);
+            this.audio.reactCrowd('cross', 0.85);
           },
           onShoot: (_shooter, power) => {
             this.matchManager.homeShots++;
             this.audio.playKick(0.85 + power * 0.15);
+            this.audio.reactCrowd('shot', Math.max(0.55, power));
+            if (power >= 0.65) {
+              this.audio.playCommentary('close_shot', { intensity: power });
+            }
             this.cameraController.triggerShake(0.18);
           },
           onTackle: () => {
@@ -402,8 +535,20 @@ export class Game {
         false,
         ctrlState.humanPressingCount,
         {
+          onPass: () => {
+            this.matchManager.homePasses++;
+            this.audio.playKick(0.5);
+            this.audio.reactCrowd('pass', 0.45);
+          },
+          onShoot: () => {
+            this.matchManager.homeShots++;
+            this.audio.playKick(0.9);
+            this.audio.reactCrowd('shot', 0.8);
+            this.audio.playCommentary('close_shot');
+          },
           onTackleAttempt: () => this.audio.playTackle(),
         },
+        'PLAYING',
       );
 
       // 3. Away AI team (disabled outfield in training mode)
@@ -419,33 +564,23 @@ export class Game {
           onPass: () => {
             this.matchManager.awayPasses++;
             this.audio.playKick(0.5);
+            this.audio.reactCrowd('pass', 0.4);
           },
           onShoot: () => {
             this.matchManager.awayShots++;
             this.audio.playKick(0.92);
+            this.audio.reactCrowd('shot', 0.82);
+            this.audio.playCommentary('close_shot');
           },
           onTackleAttempt: () => this.audio.playTackle(),
         },
+        'PLAYING',
       );
 
       // 4. Goalkeepers
       this.homeGkAI.update(
         this.homeTeam.getGoalkeeper(),
         this.homeTeam,
-        this.ballPhysics,
-        dt,
-        elapsed,
-        {
-          onSave: () => {
-            this.audio.playKick(0.55);
-            this.matchManager.setToast('Defesa do Guarda-Redes!', 1.2);
-          },
-          onDistribute: () => this.audio.playKick(0.6),
-        },
-      );
-
-      this.awayGkAI.update(
-        this.awayTeam.getGoalkeeper(),
         this.awayTeam,
         this.ballPhysics,
         dt,
@@ -453,9 +588,35 @@ export class Game {
         {
           onSave: () => {
             this.audio.playKick(0.55);
+            this.audio.reactCrowd('save', 0.9);
+            this.audio.playCommentary('save');
+            this.matchManager.setToast('Defesa do Guarda-Redes!', 1.2);
+          },
+          onDistribute: () => {
+            this.audio.playKick(0.6);
+            this.audio.reactCrowd('long_pass', 0.55);
+          },
+        },
+      );
+
+      this.awayGkAI.update(
+        this.awayTeam.getGoalkeeper(),
+        this.awayTeam,
+        this.homeTeam,
+        this.ballPhysics,
+        dt,
+        elapsed,
+        {
+          onSave: () => {
+            this.audio.playKick(0.55);
+            this.audio.reactCrowd('save', 0.92);
+            this.audio.playCommentary('save');
             this.matchManager.setToast('Grande Defesa!', 1.2);
           },
-          onDistribute: () => this.audio.playKick(0.6),
+          onDistribute: () => {
+            this.audio.playKick(0.6);
+            this.audio.reactCrowd('long_pass', 0.55);
+          },
         },
       );
 
@@ -464,6 +625,8 @@ export class Game {
         onBounce: (impact) => this.audio.playBounce(impact),
         onPostHit: () => {
           this.audio.playPostClang();
+          this.audio.reactCrowd('post', 0.95);
+          this.audio.playCommentary('post');
           this.cameraController.triggerShake(0.28);
           this.matchManager.setToast('Ao Poste!', 1.2);
         },
@@ -513,6 +676,14 @@ export class Game {
         this.stadium.triggerGoalCheer();
         this.audio.playWhistle('short');
         this.audio.playGoalCelebration();
+        const scoringTeamName =
+          boundaryEvent.scoringTeam === 'home'
+            ? this.homePreset.name
+            : this.awayPreset.name;
+        this.audio.playCommentary('goal', {
+          teamName: scoringTeamName,
+          scorerName: scorer.name,
+        });
         this.cameraController.triggerShake(0.4);
         this.updateStadiumScoreboard(true);
         this.emitHudSnapshot();
@@ -537,7 +708,7 @@ export class Game {
         );
         this.emitHudSnapshot();
       }
-    } else if (this.matchManager.phase === 'GOAL_CELEBRATION') {
+    } else if (phase === 'GOAL') {
       // Keep ball rolling gently in net and scorer running/celebrating
       this.ballPhysics.step(dt);
       if (this.scorerRef) {
@@ -545,6 +716,9 @@ export class Game {
         this.scorerRef.steer(dir * 0.4, 0.35, false, false, dt);
       }
     }
+
+    // Update dynamic turf scars & ground clods (emit marks during PLAYING, keep fading during celebrations)
+    this.turfMarks.update(phase === 'PLAYING' ? allPlayers : [], dt);
 
     // Update visuals & animations for all players
     this.homeTeam.players.forEach((p) => {
@@ -561,15 +735,16 @@ export class Game {
       dt,
       this.ballPhysics.position,
       this.ballPhysics.velocity,
-      this.matchManager.phase === 'GOAL_CELEBRATION',
+      phase === 'GOAL',
       this.scorerRef ? this.scorerRef.position : null,
+      this.playerController.activePlayer.position,
     );
 
     // Periodic scoreboard & HUD sync (~12 Hz)
     this.hudEmitAccum += dt;
     if (this.hudEmitAccum >= 0.085) {
       this.hudEmitAccum = 0;
-      this.updateStadiumScoreboard(this.matchManager.phase === 'GOAL_CELEBRATION');
+      this.updateStadiumScoreboard(phase === 'GOAL');
       this.emitHudSnapshot();
     }
 
@@ -611,6 +786,8 @@ export class Game {
     this.loop.stop();
     this.detachKeyboard();
     window.removeEventListener('resize', this.resizeHandler);
+    window.removeEventListener('orientationchange', this.resizeHandler);
+    this.turfMarks.dispose();
     this.audio.dispose();
     this.sceneManager.dispose();
   }

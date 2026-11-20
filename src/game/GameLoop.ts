@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class GameLoop {
-  private clock = new THREE.Clock();
+  private timer = new THREE.Timer();
   private frameId = 0;
   private timeoutId = 0;
   private running = false;
@@ -28,8 +28,10 @@ export class GameLoop {
   public start(): void {
     if (this.running) return;
     this.running = true;
-    this.clock.start();
-    this.clock.getDelta();
+    if (typeof document !== 'undefined') {
+      this.timer.connect(document);
+    }
+    this.timer.reset();
     this.scheduleNext();
   }
 
@@ -37,6 +39,7 @@ export class GameLoop {
     this.running = false;
     cancelAnimationFrame(this.frameId);
     window.clearTimeout(this.timeoutId);
+    this.timer.disconnect();
   }
 
   private scheduleNext(): void {
@@ -46,16 +49,17 @@ export class GameLoop {
         if (this.running) this.step();
       });
     } else {
-      this.frameId = requestAnimationFrame(() => {
-        if (this.running) this.step();
+      this.frameId = requestAnimationFrame((timestamp) => {
+        if (this.running) this.step(timestamp);
       });
     }
   }
 
-  private step(): void {
-    const rawDt = this.clock.getDelta();
+  private step(timestamp?: number): void {
+    this.timer.update(timestamp);
+    const rawDt = Math.max(0, this.timer.getDelta());
     const clampedDt = Math.min(rawDt, 0.05);
-    const elapsed = this.clock.elapsedTime;
+    const elapsed = this.timer.getElapsed();
 
     if (!this.isSoftwareGl && this.fpsLimit > 0) {
       this.accumulator += clampedDt;

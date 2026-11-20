@@ -1,8 +1,16 @@
 import { GameMode, MatchPhase, TeamSide } from './types';
 
+export type MatchTickEvent =
+  | 'none'
+  | 'enter_kickoff'
+  | 'enter_reset'
+  | 'restart_live'
+  | 'halftime'
+  | 'fulltime';
+
 export class MatchManager {
   public mode: GameMode = 'quick_match';
-  public phase: MatchPhase = 'PRE_KICKOFF';
+  public phase: MatchPhase = 'PRE_MATCH';
   public half: 1 | 2 = 1;
   public homeScore = 0;
   public awayScore = 0;
@@ -17,6 +25,7 @@ export class MatchManager {
   public lastGoalScorer = '';
   public lastGoalTeam: TeamSide | null = null;
   public statusToast = '';
+  public commentaryLine = '';
 
   public phaseTimer = 0;
   public kickoffTeam: TeamSide = 'home';
@@ -26,12 +35,13 @@ export class MatchManager {
   private homePossessionTime = 0;
   private awayPossessionTime = 0;
   private toastTimer = 0;
+  private commentaryTimer = 0;
 
   public startNewMatch(mode: GameMode, matchMinutes: number): void {
     this.mode = mode;
     this.matchDurationSeconds = Math.max(60, matchMinutes * 60);
-    this.phase = 'PRE_KICKOFF';
-    this.phaseTimer = 0.75;
+    this.phase = 'PRE_MATCH';
+    this.phaseTimer = 0.35;
     this.half = 1;
     this.halfElapsed = 0;
     this.homeScore = 0;
@@ -46,8 +56,10 @@ export class MatchManager {
     this.awayPossessionTime = 0;
     this.lastGoalScorer = '';
     this.lastGoalTeam = null;
+    this.commentaryLine = '';
+    this.commentaryTimer = 0;
     this.kickoffTeam = 'home';
-    this.setToast(mode === 'training' ? 'Modo Treino' : 'Pontapé de Saída', 1.8);
+    this.setToast(mode === 'training' ? 'Modo Treino · Pontapé de Saída' : 'Pontapé de Saída', 2.4);
   }
 
   public setToast(msg: string, duration = 1.6): void {
@@ -55,8 +67,13 @@ export class MatchManager {
     this.toastTimer = duration;
   }
 
+  public setCommentaryLine(line: string, duration = 2.6): void {
+    this.commentaryLine = line;
+    this.commentaryTimer = duration;
+  }
+
   public recordPossession(side: TeamSide | null, dt: number): void {
-    if (this.phase !== 'LIVE' || !side) return;
+    if (this.phase !== 'PLAYING' || !side) return;
     if (side === 'home') this.homePossessionTime += dt;
     else this.awayPossessionTime += dt;
   }
@@ -97,9 +114,9 @@ export class MatchManager {
     this.lastGoalTeam = scoringTeam;
     this.lastGoalScorer = scorerName;
     this.kickoffTeam = scoringTeam === 'home' ? 'away' : 'home';
-    this.phase = 'GOAL_CELEBRATION';
-    this.phaseTimer = 3.0;
-    this.setToast(`GOLO! ${scorerName}`, 3.0);
+    this.phase = 'GOAL';
+    this.phaseTimer = 2.6;
+    this.setToast(`GOLO! ${scorerName}`, 2.6);
   }
 
   public registerOutOfBounds(label: string): void {
@@ -108,38 +125,72 @@ export class MatchManager {
     this.setToast(label, 1.3);
   }
 
-  public tick(dt: number): 'none' | 'kickoff_live' | 'reset_kickoff' | 'halftime' | 'fulltime' {
+  /**
+   * Authorizes transition from KICKOFF to PLAYING once the authorized kickoff pass is executed.
+   */
+  public executeKickoff(): boolean {
+    if (this.phase !== 'KICKOFF') return false;
+    this.phase = 'PLAYING';
+    this.phaseTimer = 0;
+    this.setToast('Em Jogo!', 1.0);
+    return true;
+  }
+
+  public tick(dt: number): MatchTickEvent {
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) {
         this.statusToast = '';
       }
     }
+    if (this.commentaryTimer > 0) {
+      this.commentaryTimer -= dt;
+      if (this.commentaryTimer <= 0) {
+        this.commentaryLine = '';
+      }
+    }
 
-    if (this.phase === 'PRE_KICKOFF') {
+    if (this.phase === 'PRE_MATCH') {
       this.phaseTimer -= dt;
       if (this.phaseTimer <= 0) {
-        this.phase = 'LIVE';
-        return 'kickoff_live';
+        this.phase = 'KICKOFF';
+        this.phaseTimer = 0;
+        return 'enter_kickoff';
       }
       return 'none';
     }
 
-    if (this.phase === 'GOAL_CELEBRATION') {
+    if (this.phase === 'GOAL') {
       this.phaseTimer -= dt;
       if (this.phaseTimer <= 0) {
-        this.phase = 'PRE_KICKOFF';
-        this.phaseTimer = 0.7;
-        return 'reset_kickoff';
+        this.phase = 'RESET';
+        this.phaseTimer = 0.25;
+        return 'enter_reset';
       }
+      return 'none';
+    }
+
+    if (this.phase === 'RESET') {
+      this.phaseTimer -= dt;
+      if (this.phaseTimer <= 0) {
+        this.phase = 'KICKOFF';
+        this.phaseTimer = 0;
+        this.setToast('Pontapé de Saída', 2.2);
+        return 'enter_kickoff';
+      }
+      return 'none';
+    }
+
+    // KICKOFF waits indefinitely for authorized pass command; match clock remains paused
+    if (this.phase === 'KICKOFF') {
       return 'none';
     }
 
     if (this.phase === 'OUT_OF_BOUNDS') {
       this.phaseTimer -= dt;
       if (this.phaseTimer <= 0) {
-        this.phase = 'LIVE';
-        return 'kickoff_live';
+        this.phase = 'PLAYING';
+        return 'restart_live';
       }
       return 'none';
     }
@@ -150,15 +201,15 @@ export class MatchManager {
         this.half = 2;
         this.halfElapsed = 0;
         this.kickoffTeam = 'away';
-        this.phase = 'PRE_KICKOFF';
-        this.phaseTimer = 0.75;
-        this.setToast('2.ª Parte', 1.8);
+        this.phase = 'RESET';
+        this.phaseTimer = 0.25;
+        this.setToast('2.ª Parte · Pontapé de Saída', 2.2);
         return 'halftime';
       }
       return 'none';
     }
 
-    if (this.phase === 'LIVE') {
+    if (this.phase === 'PLAYING') {
       this.halfElapsed += dt;
       if (this.mode === 'quick_match') {
         const halfRealDuration = this.matchDurationSeconds / 2;

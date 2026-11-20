@@ -1,11 +1,19 @@
+import { InputSnapshot } from './TouchControls';
+
 export interface KeyboardCallbacks {
   onTogglePause?: () => void;
   onToggleCamera?: () => void;
 }
 
+const CROSS_CODES = ['KeyJ', 'KeyZ', 'Enter'];
+const TRIANGLE_CODES = ['KeyI', 'KeyX', 'KeyE'];
+const CIRCLE_CODES = ['KeyL', 'KeyC', 'KeyQ'];
+const SQUARE_CODES = ['KeyK', 'Space'];
+
 export class KeyboardControls {
   private keys = new Set<string>();
   private justPressed = new Set<string>();
+  private justReleased = new Set<string>();
   private mouseDown = false;
   private mouseJustPressed = false;
   private mouseJustReleased = false;
@@ -35,10 +43,10 @@ export class KeyboardControls {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      this.keys.delete(e.code);
-      if (e.code === 'KeyK' || e.code === 'Space') {
-        this.mouseJustReleased = true;
+      if (this.keys.has(e.code)) {
+        this.justReleased.add(e.code);
       }
+      this.keys.delete(e.code);
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -58,7 +66,10 @@ export class KeyboardControls {
     const onBlur = () => {
       this.keys.clear();
       this.justPressed.clear();
+      this.justReleased.clear();
       this.mouseDown = false;
+      this.mouseJustPressed = false;
+      this.mouseJustReleased = false;
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -77,7 +88,14 @@ export class KeyboardControls {
     };
   }
 
-  public consumeSnapshot() {
+  private anyInSet(set: Set<string>, codes: string[]): boolean {
+    for (let i = 0; i < codes.length; i++) {
+      if (set.has(codes[i])) return true;
+    }
+    return false;
+  }
+
+  public consumeSnapshot(): InputSnapshot {
     let moveX = 0;
     let moveZ = 0;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) moveX -= 1;
@@ -91,40 +109,34 @@ export class KeyboardControls {
       moveZ /= len;
     }
 
-    const crossHeld =
-      this.keys.has('KeyJ') || this.keys.has('KeyZ') || this.keys.has('Enter');
-    const squareHeld =
-      this.keys.has('KeyK') || this.keys.has('Space') || this.mouseDown;
+    const crossHeld = this.anyInSet(this.keys, CROSS_CODES);
+    const triangleHeld = this.anyInSet(this.keys, TRIANGLE_CODES);
+    const circleHeld = this.anyInSet(this.keys, CIRCLE_CODES);
+    const squareHeld = this.anyInSet(this.keys, SQUARE_CODES) || this.mouseDown;
     const doublePressHeld =
       this.keys.has('KeyU') || this.keys.has('KeyR') || (crossHeld && squareHeld);
 
-    const out = {
+    const out: InputSnapshot = {
       moveX,
       moveZ,
       sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
       crossHeld,
+      triangleHeld,
+      circleHeld,
       squareHeld,
       doublePressHeld,
-      justPressedCross:
-        this.justPressed.has('KeyJ') ||
-        this.justPressed.has('KeyZ') ||
-        this.justPressed.has('Enter'),
-      justPressedTriangle:
-        this.justPressed.has('KeyI') ||
-        this.justPressed.has('KeyX') ||
-        this.justPressed.has('KeyE'),
-      justPressedCircle:
-        this.justPressed.has('KeyL') ||
-        this.justPressed.has('KeyC') ||
-        this.justPressed.has('KeyQ'),
-      justPressedSquare:
-        this.justPressed.has('KeyK') ||
-        this.justPressed.has('Space') ||
-        this.mouseJustPressed,
-      justReleasedSquare: this.mouseJustReleased,
+      justPressedCross: this.anyInSet(this.justPressed, CROSS_CODES),
+      justPressedTriangle: this.anyInSet(this.justPressed, TRIANGLE_CODES),
+      justPressedCircle: this.anyInSet(this.justPressed, CIRCLE_CODES),
+      justPressedSquare: this.anyInSet(this.justPressed, SQUARE_CODES) || this.mouseJustPressed,
+      justReleasedCross: this.anyInSet(this.justReleased, CROSS_CODES),
+      justReleasedTriangle: this.anyInSet(this.justReleased, TRIANGLE_CODES),
+      justReleasedCircle: this.anyInSet(this.justReleased, CIRCLE_CODES),
+      justReleasedSquare: this.anyInSet(this.justReleased, SQUARE_CODES) || this.mouseJustReleased,
     };
 
     this.justPressed.clear();
+    this.justReleased.clear();
     this.mouseJustPressed = false;
     this.mouseJustReleased = false;
     return out;

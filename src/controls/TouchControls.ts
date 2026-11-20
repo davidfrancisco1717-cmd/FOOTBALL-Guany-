@@ -7,12 +7,17 @@ export interface InputSnapshot {
   moveZ: number;
   sprint: boolean;
   crossHeld: boolean;
+  triangleHeld: boolean;
+  circleHeld: boolean;
   squareHeld: boolean;
   doublePressHeld: boolean;
   justPressedCross: boolean;
   justPressedTriangle: boolean;
   justPressedCircle: boolean;
   justPressedSquare: boolean;
+  justReleasedCross: boolean;
+  justReleasedTriangle: boolean;
+  justReleasedCircle: boolean;
   justReleasedSquare: boolean;
 }
 
@@ -35,7 +40,13 @@ export class TouchControls {
     doublePress: false,
   };
 
-  private justReleasedSquare = false;
+  private justReleased: Record<PspButtonId, boolean> = {
+    cross: false,
+    triangle: false,
+    circle: false,
+    square: false,
+    doublePress: false,
+  };
 
   public pressButton(btn: PspButtonId): void {
     if (!this.held[btn]) {
@@ -45,8 +56,8 @@ export class TouchControls {
   }
 
   public releaseButton(btn: PspButtonId): void {
-    if (btn === 'square' && this.held.square) {
-      this.justReleasedSquare = true;
+    if (this.held[btn]) {
+      this.justReleased[btn] = true;
     }
     this.held[btn] = false;
   }
@@ -55,30 +66,20 @@ export class TouchControls {
     (Object.keys(this.held) as PspButtonId[]).forEach((k) => {
       this.held[k] = false;
       this.justPressed[k] = false;
+      this.justReleased[k] = false;
     });
-    this.justReleasedSquare = false;
     this.joystick.reset();
   }
 
-  public consumeSnapshot(): {
-    moveX: number;
-    moveZ: number;
-    sprint: boolean;
-    crossHeld: boolean;
-    squareHeld: boolean;
-    doublePressHeld: boolean;
-    justPressedCross: boolean;
-    justPressedTriangle: boolean;
-    justPressedCircle: boolean;
-    justPressedSquare: boolean;
-    justReleasedSquare: boolean;
-  } {
+  public consumeSnapshot(): InputSnapshot {
     const joy = this.joystick.getVector();
-    const out = {
+    const out: InputSnapshot = {
       moveX: joy.x,
       moveZ: joy.y,
       sprint: joy.magnitude >= 0.78,
       crossHeld: this.held.cross,
+      triangleHeld: this.held.triangle,
+      circleHeld: this.held.circle,
       squareHeld: this.held.square,
       doublePressHeld:
         this.held.doublePress || (this.held.cross && this.held.square),
@@ -86,7 +87,10 @@ export class TouchControls {
       justPressedTriangle: this.justPressed.triangle,
       justPressedCircle: this.justPressed.circle,
       justPressedSquare: this.justPressed.square,
-      justReleasedSquare: this.justReleasedSquare,
+      justReleasedCross: this.justReleased.cross,
+      justReleasedTriangle: this.justReleased.triangle,
+      justReleasedCircle: this.justReleased.circle,
+      justReleasedSquare: this.justReleased.square,
     };
 
     this.justPressed.cross = false;
@@ -94,7 +98,11 @@ export class TouchControls {
     this.justPressed.circle = false;
     this.justPressed.square = false;
     this.justPressed.doublePress = false;
-    this.justReleasedSquare = false;
+    this.justReleased.cross = false;
+    this.justReleased.triangle = false;
+    this.justReleased.circle = false;
+    this.justReleased.square = false;
+    this.justReleased.doublePress = false;
 
     return out;
   }

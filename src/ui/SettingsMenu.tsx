@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { GameSettings } from '../game/types';
 
 interface SettingsMenuProps {
@@ -239,34 +239,70 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
             </div>
           </div>
 
-          {/* Sound */}
-          <div className="flex items-center justify-between gap-4 p-3.5 rounded-xl bg-black/30 border border-white/10">
-            <button
-              onClick={() => update('soundEnabled', !settings.soundEnabled)}
-              className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-200 cursor-pointer"
-            >
-              {settings.soundEnabled ? (
-                <Volume2 className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <VolumeX className="w-4 h-4 text-slate-400" />
-              )}
-              {settings.soundEnabled ? 'Efeitos Sonoros Ativados' : 'Som Desativado'}
-            </button>
+          {/* Sound & Commentator */}
+          <div className="flex flex-col gap-3 p-3.5 rounded-xl bg-black/30 border border-white/10">
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={() => update('soundEnabled', !settings.soundEnabled)}
+                className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-200 cursor-pointer"
+              >
+                {settings.soundEnabled ? (
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-slate-400" />
+                )}
+                {settings.soundEnabled ? 'Efeitos Sonoros Ativados' : 'Som Desativado'}
+              </button>
 
-            <div className="flex items-center gap-3 w-44">
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={settings.volume}
-                onChange={(e) => update('volume', parseFloat(e.target.value))}
-                disabled={!settings.soundEnabled}
-                className="w-full accent-emerald-500 cursor-pointer"
-              />
-              <span className="font-mono-num text-xs text-slate-300 w-9 text-right">
-                {Math.round(settings.volume * 100)}%
-              </span>
+              <div className="flex items-center gap-3 w-44">
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={settings.volume}
+                  onChange={(e) => update('volume', parseFloat(e.target.value))}
+                  disabled={!settings.soundEnabled}
+                  className="w-full accent-emerald-500 cursor-pointer"
+                />
+                <span className="font-mono-num text-xs text-slate-300 w-9 text-right">
+                  {Math.round(settings.volume * 100)}%
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 pt-2.5 border-t border-white/10">
+              <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-200">
+                {settings.commentatorEnabled ? (
+                  <Mic className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <MicOff className="w-4 h-4 text-slate-400" />
+                )}
+                <span>Comentador da Partida</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-black/35 border border-white/10 w-44">
+                <button
+                  onClick={() => update('commentatorEnabled', true)}
+                  className={`py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    settings.commentatorEnabled
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  Ativado
+                </button>
+                <button
+                  onClick={() => update('commentatorEnabled', false)}
+                  className={`py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    !settings.commentatorEnabled
+                      ? 'bg-slate-600 text-white'
+                      : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  Desligado
+                </button>
+              </div>
             </div>
           </div>
         </div>
